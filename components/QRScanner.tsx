@@ -20,10 +20,15 @@ export default function QrScanner() {
   const [files, setFiles] = useState<
     { name: string; content: string; url: string }[]
   >([]);
+  const [lastScannedCode, setLastScannedCode] = useState<string | null>(null);
+  const [chunkCount, setChunkCount] = useState(0);
+  const [processingChunk, setProcessingChunk] = useState(false);
 
   const startScanner = async () => {
     setError(null);
     setScannedData(null);
+    setLastScannedCode(null);
+    setProcessingChunk(false);
     setScanning(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -60,7 +65,7 @@ export default function QrScanner() {
   };
 
   const scanQRCode = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current || processingChunk) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -80,33 +85,44 @@ export default function QrScanner() {
         inversionAttempts: "dontInvert",
       });
 
-      if (code) {
+      if (code && code.data && code.data !== lastScannedCode) {
+        // Mark that we're processing to prevent multiple rapid scans
+        setProcessingChunk(true);
+        
+        // Store this code to prevent re-scanning the same code
+        setLastScannedCode(code.data);
+        
         // Store the newly scanned data
         setScannedData(code.data);
         
-        // Update accumulated data and toggle ping state
+        // Increment chunk counter
+        setChunkCount(prev => prev + 1);
+        
+        // Toggle ping to signal to sender we've received this chunk
+        setPing(prev => !prev);
+        
+        // Update accumulated data
         setAccumulatedData(prevData => {
           const newData = prevData + code.data;
           
           // Check if the accumulated data contains the termination pattern
-          if (newData.includes("*^*~TER~*^*")) {
+          if (code.data.endsWith("*^*~TER~*^*") || newData.includes("*^*~TER~*^*")) {
             // Process the complete data after this render cycle
             setTimeout(() => {
               processText(newData);
               stopScanner();
             }, 0);
-            return newData;
+          } else {
+            // If not the terminal chunk, allow scanning to continue after a delay
+            // This delay gives time for the sender to see our ping change and update their QR
+            setTimeout(() => {
+              setProcessingChunk(false);
+            }, 1000); // 1 second delay to ensure sender has time to see the ping change
           }
           
-          // Toggle ping to show visual feedback
-          setPing(prev => !prev);
           return newData;
         });
         
-        // Brief pause to prevent multiple reads of the same QR code
-        setTimeout(() => {
-          animationRef.current = requestAnimationFrame(scanQRCode);
-        }, 500);
         return;
       }
     }
@@ -142,7 +158,17 @@ export default function QrScanner() {
     setScannedData(null);
     setFiles([]);
     setError(null);
+    setChunkCount(0);
+    setLastScannedCode(null);
+    setProcessingChunk(false);
   };
+
+  useEffect(() => {
+    // Continue scanning if not processing a chunk
+    if (scanning && !processingChunk && animationRef.current === null) {
+      animationRef.current = requestAnimationFrame(scanQRCode);
+    }
+  }, [scanning, processingChunk]);
 
   useEffect(() => {
     return () => {
@@ -181,39 +207,42 @@ export default function QrScanner() {
             <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
               {error ? (
                 <p className="text-center text-red-400 mb-4">{error}</p>
-              ) : scannedData ? (
+              ) : accumulatedData ? (
                 <div className="w-full p-4 text-center">
-                  <h3 className="font-medium mb-2">Scanned Result:</h3>
+                  <h3 className="font-medium mb-2">Scanned Data:</h3>
                   <div className="bg-white/10 p-3 rounded-md overflow-auto max-h-32 text-sm break-all">
                     {accumulatedData.length > 100 
                       ? `${accumulatedData.substring(0, 100)}...` 
                       : accumulatedData}
                   </div>
+                  <p className="mt-2 text-sm text-green-400">
+                    {chunkCount} chunks received
+                  </p>
                 </div>
               ) : (
                 <Camera className="h-12 w-12 mb-2 opacity-50" />
               )}
               <Button
                 onClick={files.length > 0 ? resetScanner : startScanner}
-                className="mt-4"
-                variant={error || scannedData ? "default" : "outline"}
+                className="mt-4 text-zinc-700 bg-zinc-200 hover:bg-white cursor-pointer hover:text-black"
+                variant={error || accumulatedData ? "default" : "outline"}
               >
                 {error
                   ? "Try Again"
                   : files.length > 0
                   ? "Reset Scanner"
-                  : scannedData
+                  : accumulatedData
                   ? "Scan Another Code"
                   : "Start Camera"}
               </Button>
             </div>
           )}
         </div>
-        <div className="w-[20vw] overflow-hidden h-[20vw] bg-amber-500 rounded-lg">
+        <div className="w-[20vw] overflow-hidden h-[20vw] bg-amber-500 rounded-lg flex items-center justify-center">
           {ping ? (
             <Image
               src={"/1.png"}
-              alt="Scanning indicator"
+              alt="Ready for next chunk"
               width={1200}
               height={1200}
               className="w-full h-full"
@@ -221,11 +250,16 @@ export default function QrScanner() {
           ) : (
             <Image
               src={"/0.png"}
-              alt="Scanning indicator"
+              alt="Processing chunk"
               width={1200}
               height={1200}
               className="w-full h-full"
             />
+          )}
+          {scanning && (
+            <div className="absolute text-black font-bold text-lg">
+              {chunkCount > 0 ? `Chunk ${chunkCount}` : "Ready to scan"}
+            </div>
           )}
         </div>
       </div>
@@ -235,8 +269,14 @@ export default function QrScanner() {
         {scanning ? (
           <div className="flex w-full items-center justify-between">
             <span className="flex items-center">
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              Scanning for QR code...
+              {processingChunk ? (
+                <span className="text-green-400">Processing chunk data...</span>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Scanning for QR code...
+                </>
+              )}
             </span>
             <Button variant="outline" size="sm" onClick={stopScanner}>
               Cancel
@@ -253,7 +293,7 @@ export default function QrScanner() {
             {files.map((file, index) => (
               <div
                 key={index}
-                className="flex bg-white items-center justify-between p-2 border rounded"
+                className="flex bg-white items-center justify-between p-2 rounded"
               >
                 <span>{file.name}</span>
                 <a
