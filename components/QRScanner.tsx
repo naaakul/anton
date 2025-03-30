@@ -3,15 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Camera, Copy, RefreshCw } from "lucide-react";
+import { CardFooter } from "@/components/ui/card";
+import { Camera, RefreshCw } from "lucide-react";
 import Image from "next/image";
+import { Download } from "lucide-react";
 
 export default function QrScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -19,8 +14,12 @@ export default function QrScanner() {
   const [scanning, setScanning] = useState(false);
   const [scannedData, setScannedData] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const animationRef = useRef<number>(null);
+  const animationRef = useRef<number | null>(null);
   const [ping, setPing] = useState(true);
+  const [accumulatedData, setAccumulatedData] = useState("");
+  const [files, setFiles] = useState<
+    { name: string; content: string; url: string }[]
+  >([]);
 
   const startScanner = async () => {
     setError(null);
@@ -35,7 +34,6 @@ export default function QrScanner() {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
 
-        // Start scanning for QR codes
         scanQRCode();
       }
     } catch (err) {
@@ -70,52 +68,85 @@ export default function QrScanner() {
 
     if (!context) return;
 
-    // Only process frames when video is playing
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      // Set canvas dimensions to match video
       canvas.height = video.videoHeight;
       canvas.width = video.videoWidth;
 
-      // Draw current video frame to canvas
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Get image data for QR processing
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
 
-      // Process with jsQR
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
         inversionAttempts: "dontInvert",
       });
 
-      // If QR code found
       if (code) {
+        // Store the newly scanned data
         setScannedData(code.data);
-        stopScanner();
+        
+        // Update accumulated data and toggle ping state
+        setAccumulatedData(prevData => {
+          const newData = prevData + code.data;
+          
+          // Check if the accumulated data contains the termination pattern
+          if (newData.includes("*^*~TER~*^*")) {
+            // Process the complete data after this render cycle
+            setTimeout(() => {
+              processText(newData);
+              stopScanner();
+            }, 0);
+            return newData;
+          }
+          
+          // Toggle ping to show visual feedback
+          setPing(prev => !prev);
+          return newData;
+        });
+        
+        // Brief pause to prevent multiple reads of the same QR code
+        setTimeout(() => {
+          animationRef.current = requestAnimationFrame(scanQRCode);
+        }, 500);
         return;
       }
     }
 
-    // Continue scanning
     animationRef.current = requestAnimationFrame(scanQRCode);
   };
 
-  const copyToClipboard = async () => {
-    if (scannedData) {
-      try {
-        await navigator.clipboard.writeText(scannedData);
-      } catch (err) {
-        console.error("Failed to copy:", err);
-      }
+  const processText = (dataToProcess: string) => {
+    const filePattern = /\*\^\*~(.*?)~\*\^\*([\s\S]*?)\*\^\*~TER~\*\^\*/g;
+    const extractedFiles: { name: string; content: string; url: string }[] = [];
+    let match;
+
+    while ((match = filePattern.exec(dataToProcess)) !== null) {
+      const fileName = match[1];
+      const fileContent = match[2];
+
+      // Create blob and URL
+      const blob = new Blob([fileContent], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+
+      extractedFiles.push({
+        name: fileName,
+        content: fileContent,
+        url: url,
+      });
     }
+
+    setFiles(extractedFiles);
+  };
+
+  const resetScanner = () => {
+    setAccumulatedData("");
+    setScannedData(null);
+    setFiles([]);
+    setError(null);
   };
 
   useEffect(() => {
-    console.log("data bolte - ", scannedData);
-  }, [scannedData]);
-
-  // Clean up on unmount
-  useEffect(() => {
     return () => {
+      // Clean up resources
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
@@ -124,8 +155,13 @@ export default function QrScanner() {
         const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
         tracks.forEach((track) => track.stop());
       }
+
+      // Release any blob URLs to prevent memory leaks
+      files.forEach(file => {
+        URL.revokeObjectURL(file.url);
+      });
     };
-  }, []);
+  }, [files]);
 
   return (
     <div className="w-full">
@@ -149,19 +185,23 @@ export default function QrScanner() {
                 <div className="w-full p-4 text-center">
                   <h3 className="font-medium mb-2">Scanned Result:</h3>
                   <div className="bg-white/10 p-3 rounded-md overflow-auto max-h-32 text-sm break-all">
-                    {scannedData}
+                    {accumulatedData.length > 100 
+                      ? `${accumulatedData.substring(0, 100)}...` 
+                      : accumulatedData}
                   </div>
                 </div>
               ) : (
                 <Camera className="h-12 w-12 mb-2 opacity-50" />
               )}
               <Button
-                onClick={startScanner}
+                onClick={files.length > 0 ? resetScanner : startScanner}
                 className="mt-4"
                 variant={error || scannedData ? "default" : "outline"}
               >
                 {error
                   ? "Try Again"
+                  : files.length > 0
+                  ? "Reset Scanner"
                   : scannedData
                   ? "Scan Another Code"
                   : "Start Camera"}
@@ -173,7 +213,7 @@ export default function QrScanner() {
           {ping ? (
             <Image
               src={"/1.png"}
-              alt="one"
+              alt="Scanning indicator"
               width={1200}
               height={1200}
               className="w-full h-full"
@@ -181,7 +221,7 @@ export default function QrScanner() {
           ) : (
             <Image
               src={"/0.png"}
-              alt="one"
+              alt="Scanning indicator"
               width={1200}
               height={1200}
               className="w-full h-full"
@@ -191,14 +231,6 @@ export default function QrScanner() {
       </div>
       <div className="w-full h-[1px] bg-zinc-600 m-4"></div>
 
-      {scannedData && (
-        <div className="mt-4 flex justify-end">
-          <Button variant="outline" size="sm" onClick={copyToClipboard}>
-            <Copy className="h-4 w-4 mr-2" />
-            Copy to Clipboard
-          </Button>
-        </div>
-      )}
       <CardFooter className="text-sm text-muted-foreground">
         {scanning ? (
           <div className="flex w-full items-center justify-between">
@@ -214,6 +246,31 @@ export default function QrScanner() {
           <p>Position a QR code in the camera view to scan it.</p>
         )}
       </CardFooter>
+      <div className="space-y-2 mt-4">
+        <p className="text-white font-medium">Extracted Files</p>
+        {files.length > 0 ? (
+          <>
+            {files.map((file, index) => (
+              <div
+                key={index}
+                className="flex bg-white items-center justify-between p-2 border rounded"
+              >
+                <span>{file.name}</span>
+                <a
+                  href={file.url}
+                  download={file.name}
+                  className="flex items-center text-primary hover:underline"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Download
+                </a>
+              </div>
+            ))}
+          </>
+        ) : (
+          <p className="text-gray-400 text-sm italic">No files extracted yet</p>
+        )}
+      </div>
     </div>
   );
 }
