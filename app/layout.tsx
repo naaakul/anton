@@ -1,10 +1,24 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans, Averia_Serif_Libre } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+});
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-dm-sans",
+  weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
+});
+
+const averia = Averia_Serif_Libre({
+  subsets: ["latin"],
+  variable: "--font-aver",
+  weight: ["300", "400", "700"],
+  style: ["italic"],
 });
 
 const geistMono = Geist_Mono({
@@ -25,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${dmSans.variable} ${averia.variable}`}
       >
         {children}
       </body>
