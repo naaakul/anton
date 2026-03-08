@@ -4,38 +4,58 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { signIn } from "@/lib/auth/auth-client";
 
 export default function LoginPage() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<"google" | "email" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function handleEmailSignIn(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setLoading(true);
+    setLoading("email");
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    const email = formData.get("email");
-    const password = formData.get("password");
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
 
-    const res = await fetch("/api/auth/sign-in/email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
+    await signIn.email(
+      {
+        email,
+        password,
+        callbackURL: "/dashboard",
+      },
+      {
+        onResponse: () => setLoading(null),
+        onError: () => {
+          setLoading(null);
+          setError("Invalid email or password");
+        },
+      }
+    );
+  }
 
-    setLoading(false);
+  async function handleGoogleSignIn() {
+    setError(null);
 
-    if (!res.ok) {
-      setError("Invalid email or password");
-      return;
-    }
-
-    window.location.href = "/dashboard";
+    await signIn.social(
+      {
+        provider: "google",
+        callbackURL: "/dashboard",
+      },
+      {
+        onRequest: () => setLoading("google"),
+        onResponse: () => setLoading(null),
+        onError: () => {
+          setLoading(null);
+          setError("Google login failed");
+        },
+      }
+    );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-black text-white">
+    <div className="flex h-full w-full items-center justify-center bg-black text-white">
       <div className="w-full max-w-sm space-y-6">
         {/* Tabs */}
         <div className="flex justify-center gap-6 text-sm">
@@ -78,16 +98,14 @@ export default function LoginPage() {
             />
           </div>
 
-          {error && (
-            <p className="text-xs text-red-500">{error}</p>
-          )}
+          {error && <p className="text-xs text-red-500">{error}</p>}
 
           <Button
             type="submit"
-            disabled={loading}
+            disabled={loading !== null}
             className="w-full bg-white text-black hover:bg-neutral-200"
           >
-            {loading ? "Signing in..." : "Sign in"}
+            {loading === "email" ? "Signing in..." : "Sign in"}
           </Button>
         </form>
 
@@ -102,12 +120,11 @@ export default function LoginPage() {
         <Button
           type="button"
           variant="outline"
+          disabled={loading !== null}
           className="w-full border-muted bg-transparent text-white hover:bg-white/5"
-          onClick={() => {
-            window.location.href = "/api/auth/sign-in/google";
-          }}
+          onClick={handleGoogleSignIn}
         >
-          Continue with Google
+          {loading === "google" ? "Redirecting..." : "Continue with Google"}
         </Button>
       </div>
     </div>

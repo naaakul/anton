@@ -6,25 +6,33 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signIn } from "@/lib/auth/auth-client";
+import { signIn, signUp } from "@/lib/auth/auth-client";
 import Image from "next/image";
 
 export default function SignupPage() {
   const [loading, setLoading] = useState<"google" | "email" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+
   const handleGoogle = async () => {
+    setError(null);
+
     await signIn.social(
       {
         provider: "google",
-        callbackURL: "/auth/onboarding",
+        callbackURL: "/dashboard",
       },
       {
         onRequest: () => setLoading("google"),
         onResponse: () => setLoading(null),
-      },
+        onError: () => {
+          setLoading(null);
+          setError("Google signup failed");
+        },
+      }
     );
   };
+
 
   const handleEmailSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -35,35 +43,32 @@ export default function SignupPage() {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
 
-    const res = await fetch("/api/auth/sign-up/email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    await signUp.email(
+      {
         email,
         password,
-        name: email, // REQUIRED
-      }),
-    });
-
-    setLoading(null);
-
-    if (!res.ok) {
-      const data = await res.json();
-      setError(data?.message ?? "Signup failed");
-      return;
-    }
-
-    window.location.href = "/auth/onboarding";
+        name: email,
+        callbackURL: "/dashboard",
+      },
+      {
+        onResponse: () => setLoading(null),
+        onError: () => {
+          setLoading(null);
+          setError("Signup failed");
+        },
+      }
+    );
   };
 
   return (
     <div className="w-full max-w-sm space-y-6">
       <div className="flex gap-3 text-xl">
-        <p className="text-muted-foreground">login</p>
-        <p className="">signup</p>
+        <Link href="/auth/login">
+          <p className="text-muted-foreground">login</p>
+        </Link>
+        <p>signup</p>
       </div>
 
-      {/* Email signup */}
       <form onSubmit={handleEmailSignup} className="space-y-4">
         <div>
           <Label>Email</Label>
@@ -79,8 +84,8 @@ export default function SignupPage() {
         <div>
           <Label>Password</Label>
           <Input
-            name="email"
-            type="email"
+            name="password"
+            type="password"
             placeholder="Password"
             required
             className="border-b border-muted-foreground rounded-none"
@@ -98,12 +103,10 @@ export default function SignupPage() {
         </Button>
       </form>
 
-      {/* Divider */}
       <div className="flex items-center justify-center gap-3 text-xs text-neutral-400">
         or
       </div>
 
-      {/* Google */}
       <button
         disabled={loading !== null}
         onClick={handleGoogle}
@@ -113,12 +116,12 @@ export default function SignupPage() {
           <Loader2 className="animate-spin" size={18} />
         ) : (
           <Image
-            src={"/google.svg"}
-            alt={"logo"}
-            height={200}
-            width={200}
+            src="/google.svg"
+            alt="Google"
+            height={20}
+            width={20}
             className="w-5"
-          ></Image>
+          />
         )}
         Continue with Google
       </button>
