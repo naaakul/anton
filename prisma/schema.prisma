@@ -19,6 +19,8 @@ model User {
 
   sessions      Session[]
   accounts      Account[]
+
+  apps App[]
 }
 
 model Session {
@@ -67,8 +69,6 @@ model Account {
 }
 
 
-
-
 model Verification {
   id         String   @id @default(cuid())
   identifier String
@@ -78,3 +78,17 @@ model Verification {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
+
+model App {
+  id        String   @id @default(cuid())
+
+  name      String
+  dbUri     String
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+

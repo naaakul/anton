@@ -23,7 +23,7 @@ export default function LoginPage() {
       {
         email,
         password,
-        callbackURL: "/dashboard",
+        callbackURL: "/apps",
       },
       {
         onResponse: () => setLoading(null),
