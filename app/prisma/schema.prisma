@@ -7,88 +7,82 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
+enum DbType {
+  POSTGRES
+  MONGODB
+}
+
+
 model User {
   id            String   @id @default(cuid())
   name          String?
   email         String   @unique
   emailVerified Boolean  @default(false)
   image         String?
-
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   sessions      Session[]
   accounts      Account[]
-
-  apps App[]
+  apps          App[]
 }
 
 model Session {
-  id            String   @id @default(cuid())
-
-  sessionToken  String   @unique
-  token         String?
-
-  expires       DateTime
-  expiresAt     DateTime
-
-  ipAddress     String?
-  userAgent     String?
-
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(cuid())
+  token       String   @unique         
+  expiresAt   DateTime
+  ipAddress   String?
+  userAgent   String?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
-
 
 model Account {
-  id                     String   @id @default(cuid())
+  id                   String    @id @default(cuid())
+  accountId            String
+  providerId           String
+  userId               String
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken          String?
+  refreshToken         String?
+  idToken              String?
+  accessTokenExpiresAt DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                String?
+  password             String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  provider               String
-  providerId             String
-  providerAccountId      String
-  accountId              String
-
-  password               String?   // ← REQUIRED FOR EMAIL AUTH
-
-  accessToken            String?
-  refreshToken           String?
-  idToken                String?
-  accessTokenExpiresAt   DateTime?
-  scope                  String?
-
-  userId                 String
-  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-
-  @@unique([provider, accountId])
+  @@unique([providerId, accountId])
 }
-
 
 model Verification {
   id         String   @id @default(cuid())
   identifier String
   value      String
   expiresAt  DateTime
-
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
 }
+
 
 model App {
-  id        String   @id @default(cuid())
+  id               String   @id @default(cuid())
+  trackingId       String   @unique @default(cuid()) 
+  name             String
+  domain           String                           
+  dbType           DbType
+  encryptedDbUri   String                         
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  name      String
-  dbUri     String
-
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@index([userId])
+  @@index([trackingId])
 }
-
