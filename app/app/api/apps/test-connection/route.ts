@@ -21,6 +21,7 @@ async function testMongo(uri: string): Promise<void> {
 
 export async function POST(req: Request) {
   const session = await getServerSession()
+  console.log("SESSION DEBUG:", JSON.stringify(session, null, 2))
 
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

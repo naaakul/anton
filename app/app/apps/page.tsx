@@ -1,142 +1,514 @@
+// app/apps/page.tsx
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Globe,
+  Plus,
+  CheckCircle2,
+  Clock,
+  Copy,
+  Check,
+  Loader2,
+  Database,
+  ChevronRight,
+} from "lucide-react"
 
-type DbType = "POSTGRES" | "MONGODB"
-type TestStatus = "idle" | "testing" | "ok" | "fail"
+// ── Types ──────────────────────────────────────────────────────────────────────
 
-export default function AppsPage() {
-  const router = useRouter()
+type App = {
+  id:         string
+  trackingId: string
+  name:       string
+  domain:     string
+  framework:  string
+  dbType:     string
+  createdAt:  string
+}
 
-  const [name, setName] = useState("")
-  const [domain, setDomain] = useState("")
-  const [dbType, setDbType] = useState<DbType>("POSTGRES")
-  const [dbUri, setDbUri] = useState("")
-  const [testStatus, setTestStatus] = useState<TestStatus>("idle")
-  const [testError, setTestError] = useState("")
-  const [loading, setLoading] = useState(false)
+type Step = 1 | 2 | 3
 
-  async function handleTestConnection() {
-    setTestStatus("testing")
-    setTestError("")
+type ConnectStatus = "idle" | "testing" | "pushing" | "ok" | "fail"
 
-    const res = await fetch("/api/apps/test-connection", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dbUri, dbType }),
-    })
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-    if (res.ok) {
-      setTestStatus("ok")
-    } else {
-      const data = await res.json()
-      setTestStatus("fail")
-      setTestError(data.error ?? "Connection failed")
-    }
+function getSnippet(trackingId: string) {
+  return `import { AntonalyzeProvider } from "antonalyze/next"
+
+// app/layout.tsx  — wrap your root layout
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        <AntonalyzeProvider trackingId="${trackingId}">
+          {children}
+        </AntonalyzeProvider>
+      </body>
+    </html>
+  )
+}`
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────────────
+
+function CreateAppModal({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open:      boolean
+  onClose:   () => void
+  onCreated: (app: App) => void
+}) {
+  const [step,          setStep]          = useState<Step>(1)
+  const [name,          setName]          = useState("")
+  const [domain,        setDomain]        = useState("")
+  const [framework,     setFramework]     = useState("nextjs")
+  const [dbUri,         setDbUri]         = useState("")
+  const [connectStatus, setConnectStatus] = useState<ConnectStatus>("idle")
+  const [connectError,  setConnectError]  = useState("")
+  const [submitting,    setSubmitting]    = useState(false)
+  const [createdApp,    setCreatedApp]    = useState<App | null>(null)
+  const [copied,        setCopied]        = useState(false)
+
+  function resetModal() {
+    setStep(1)
+    setName("")
+    setDomain("")
+    setFramework("nextjs")
+    setDbUri("")
+    setConnectStatus("idle")
+    setConnectError("")
+    setSubmitting(false)
+    setCreatedApp(null)
+    setCopied(false)
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (testStatus !== "ok") return // must test first
+  function handleClose() {
+    resetModal()
+    onClose()
+  }
 
-    setLoading(true)
+  async function handleConnect() {
+    setConnectStatus("testing")
+    setConnectError("")
+
+    // Step 1 — test connection
+    const testRes = await fetch("/api/apps/test-connection", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ dbUri, dbType: "POSTGRES" }),
+    })
+
+    if (!testRes.ok) {
+      const data = await testRes.json()
+      setConnectStatus("fail")
+      setConnectError(data.error ?? "Connection failed")
+      return
+    }
+
+    // Step 2 — push schema
+    setConnectStatus("pushing")
+
+    const pushRes = await fetch("/api/apps/push-schema", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ dbUri }),
+    })
+
+    if (!pushRes.ok) {
+      const data = await pushRes.json()
+      setConnectStatus("fail")
+      setConnectError(data.error ?? "Schema push failed")
+      return
+    }
+
+    setConnectStatus("ok")
+  }
+
+  async function handleCreate() {
+    setSubmitting(true)
 
     const res = await fetch("/api/apps/create", {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, domain, dbType, dbUri }),
+      body:    JSON.stringify({
+        name,
+        domain,
+        framework,
+        dbType: "POSTGRES",
+        dbUri,
+      }),
     })
 
-    setLoading(false)
+    setSubmitting(false)
 
-    if (res.ok) {
-      router.push("/apps") // or wherever your app list lives
-    }
+    if (!res.ok) return
+
+    const app = await res.json()
+    setCreatedApp(app)
+    setStep(3)
   }
 
-  const canSubmit = testStatus === "ok" && name && domain && dbUri && !loading
+  function handleCopy() {
+    if (!createdApp) return
+    navigator.clipboard.writeText(getSnippet(createdApp.trackingId))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  function handleFinish() {
+    if (createdApp) onCreated(createdApp)
+    handleClose()
+  }
+
+  const step1Valid = name.trim() && domain.trim() && framework
 
   return (
-    <div className="max-w-xl mx-auto mt-20">
-      <h1 className="text-2xl font-bold mb-2">Add App</h1>
-      <p className="text-sm text-gray-500 mb-8">
-        Your DB URI is encrypted before storage and never logged.
-      </p>
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent className="sm:max-w-lg gap-0 p-0 overflow-hidden">
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input
-          type="text"
-          placeholder="App Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full border p-3 rounded"
-          required
-        />
+        {/* ── Header ── */}
+        <DialogHeader className="px-6 pt-6 pb-4">
+          <DialogTitle className="text-base font-semibold">
+            {step === 1 && "Create app"}
+            {step === 2 && "Connect database"}
+            {step === 3 && "You're all set"}
+          </DialogTitle>
 
-        <input
-          type="text"
-          placeholder="Domain (e.g. mysite.com)"
-          value={domain}
-          onChange={(e) => setDomain(e.target.value.replace(/^https?:\/\//, ""))}
-          className="w-full border p-3 rounded"
-          required
-        />
+          {/* Step indicator */}
+          <div className="flex items-center gap-1.5 mt-3">
+            {([1, 2, 3] as Step[]).map((s) => (
+              <div
+                key={s}
+                className={`h-1 rounded-full transition-all duration-300 ${
+                  s === step
+                    ? "w-6 bg-foreground"
+                    : s < step
+                    ? "w-4 bg-foreground/30"
+                    : "w-4 bg-muted"
+                }`}
+              />
+            ))}
+          </div>
+        </DialogHeader>
 
-        <select
-          value={dbType}
-          onChange={(e) => {
-            setDbType(e.target.value as DbType)
-            setTestStatus("idle") // reset test if type changes
-          }}
-          className="w-full border p-3 rounded bg-white"
-        >
-          <option value="POSTGRES">PostgreSQL</option>
-          <option value="MONGODB">MongoDB</option>
-        </select>
+        <Separator />
 
-        <div className="space-y-2">
-          <input
-            type="password"       // password field so URI isn't visible in browser history
-            placeholder={
-              dbType === "POSTGRES"
-                ? "postgres://user:pass@host:5432/db"
-                : "mongodb+srv://user:pass@cluster.mongodb.net/db"
-            }
-            value={dbUri}
-            onChange={(e) => {
-              setDbUri(e.target.value)
-              setTestStatus("idle") // reset test if URI changes
-            }}
-            className="w-full border p-3 rounded font-mono text-sm"
-            required
-          />
+        {/* ── Step 1 — App details ── */}
+        {step === 1 && (
+          <div className="px-6 py-5 space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="app-name">App name</Label>
+              <Input
+                id="app-name"
+                placeholder="My Website"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
 
-          <button
-            type="button"
-            onClick={handleTestConnection}
-            disabled={!dbUri || testStatus === "testing"}
-            className="text-sm px-3 py-1.5 border rounded hover:bg-gray-50 disabled:opacity-40"
-          >
-            {testStatus === "testing" ? "Testing..." : "Test Connection"}
-          </button>
+            <div className="space-y-1.5">
+              <Label htmlFor="domain">Domain</Label>
+              <div className="relative">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="domain"
+                  placeholder="mysite.com"
+                  className="pl-9"
+                  value={domain}
+                  onChange={(e) =>
+                    setDomain(e.target.value.replace(/^https?:\/\//, ""))
+                  }
+                />
+              </div>
+            </div>
 
-          {testStatus === "ok" && (
-            <p className="text-sm text-green-600">Connection successful</p>
-          )}
-          {testStatus === "fail" && (
-            <p className="text-sm text-red-500">{testError}</p>
-          )}
+            <div className="space-y-1.5">
+              <Label>Framework</Label>
+              <Select value={framework} onValueChange={setFramework}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nextjs">Next.js</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 2 — DB connection ── */}
+        {step === 2 && (
+          <div className="px-6 py-5 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Paste your Neon (or any Postgres) URI. We'll test the connection
+              and push the analytics schema automatically.
+            </p>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="db-uri">Postgres URI</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="db-uri"
+                  type="password"
+                  placeholder="postgres://user:pass@host:5432/db"
+                  className="font-mono text-sm flex-1"
+                  value={dbUri}
+                  onChange={(e) => {
+                    setDbUri(e.target.value)
+                    setConnectStatus("idle")
+                    setConnectError("")
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 h-9"
+                  disabled={!dbUri || connectStatus === "testing" || connectStatus === "pushing"}
+                  onClick={handleConnect}
+                >
+                  {connectStatus === "testing" && (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Testing</>
+                  )}
+                  {connectStatus === "pushing" && (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Pushing</>
+                  )}
+                  {(connectStatus === "idle" || connectStatus === "fail") && (
+                    <><Database className="w-3.5 h-3.5 mr-1.5" />Connect</>
+                  )}
+                  {connectStatus === "ok" && (
+                    <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-green-500" />Connected</>
+                  )}
+                </Button>
+              </div>
+
+              {connectStatus === "fail" && (
+                <p className="text-xs text-destructive mt-1">{connectError}</p>
+              )}
+
+              {connectStatus === "ok" && (
+                <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 px-3 py-2 mt-2">
+                  <p className="text-xs text-green-700 dark:text-green-400 font-medium">
+                    Connected — analytics schema pushed successfully
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
+                    Tables: antz_pageviews, antz_events, antz_sessions
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 3 — SDK snippet ── */}
+        {step === 3 && createdApp && (
+          <div className="px-6 py-5 space-y-4">
+            <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 px-3 py-2.5 flex items-start gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-green-800 dark:text-green-300">
+                  App created
+                </p>
+                <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
+                  Tracking ID: <span className="font-mono">{createdApp.trackingId}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">
+                  Add this to your app/layout.tsx
+                </Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={handleCopy}
+                >
+                  {copied
+                    ? <><Check className="w-3 h-3 mr-1" />Copied</>
+                    : <><Copy className="w-3 h-3 mr-1" />Copy</>
+                  }
+                </Button>
+              </div>
+              <pre className="bg-muted rounded-md p-3 text-xs font-mono overflow-x-auto leading-relaxed whitespace-pre">
+                {getSnippet(createdApp.trackingId)}
+              </pre>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Your app will show <span className="font-medium text-foreground">Waiting to connect</span> until
+              the first event is received from your site.
+            </p>
+          </div>
+        )}
+
+        <Separator />
+
+        {/* ── Footer buttons ── */}
+        <div className="px-6 py-4 flex justify-between items-center">
+          <Button variant="ghost" size="sm" onClick={handleClose}>
+            {step === 3 ? "Close" : "Cancel"}
+          </Button>
+
+          <div className="flex gap-2">
+            {step === 2 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setStep(1)}
+              >
+                Back
+              </Button>
+            )}
+
+            {step === 1 && (
+              <Button
+                size="sm"
+                disabled={!step1Valid}
+                onClick={() => setStep(2)}
+              >
+                Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            )}
+
+            {step === 2 && (
+              <Button
+                size="sm"
+                disabled={connectStatus !== "ok" || submitting}
+                onClick={handleCreate}
+              >
+                {submitting
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Creating...</>
+                  : <>Next <ChevronRight className="w-3.5 h-3.5 ml-1" /></>
+                }
+              </Button>
+            )}
+
+            {step === 3 && (
+              <Button size="sm" onClick={handleFinish}>
+                Done
+              </Button>
+            )}
+          </div>
         </div>
 
-        <button
-          type="submit"
-          className="bg-black text-white px-4 py-2 rounded disabled:opacity-40 w-full"
-          disabled={!canSubmit}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── App card ───────────────────────────────────────────────────────────────────
+
+function AppCard({ app }: { app: App }) {
+  return (
+    <Card className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors cursor-pointer group">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+          <Globe className="w-4 h-4 text-muted-foreground" />
+        </div>
+        <div>
+          <p className="text-sm font-medium leading-none">{app.name}</p>
+          <p className="text-xs text-muted-foreground mt-1">{app.domain}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Badge
+          variant="outline"
+          className="text-xs gap-1.5 text-amber-600 border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-400"
         >
-          {loading ? "Creating..." : "Create App"}
-        </button>
-      </form>
+          <Clock className="w-3 h-3" />
+          Waiting to connect
+        </Badge>
+        <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+    </Card>
+  )
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
+
+export default function AppsPage() {
+  const [apps,        setApps]        = useState<App[]>([])
+  const [loadingApps, setLoadingApps] = useState(true)
+  const [modalOpen,   setModalOpen]   = useState(false)
+
+  useEffect(() => {
+    fetch("/api/apps")
+      .then((r) => r.json())
+      .then((data) => setApps(Array.isArray(data) ? data : []))
+      .finally(() => setLoadingApps(false))
+  }, [])
+
+  function handleAppCreated(app: App) {
+    setApps((prev) => [app, ...prev])
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-16">
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Apps</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {apps.length === 0 ? "No apps yet" : `${apps.length} app${apps.length > 1 ? "s" : ""}`}
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setModalOpen(true)}>
+          <Plus className="w-4 h-4 mr-1.5" />
+          Create app
+        </Button>
+      </div>
+
+      {/* List */}
+      {loadingApps ? (
+        <div className="flex items-center justify-center py-20 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
+      ) : apps.length === 0 ? (
+        <div className="border border-dashed rounded-xl py-20 text-center">
+          <Database className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm font-medium">No apps yet</p>
+          <p className="text-xs text-muted-foreground mt-1 mb-4">
+            Create your first app to start tracking analytics
+          </p>
+          <Button size="sm" variant="outline" onClick={() => setModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-1.5" />
+            Create app
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {apps.map((app) => (
+            <AppCard key={app.id} app={app} />
+          ))}
+        </div>
+      )}
+
+      <CreateAppModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onCreated={handleAppCreated}
+      />
     </div>
   )
 }
