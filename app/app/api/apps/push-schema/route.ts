@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server"
 import getServerSession from "@/utils/getServerSession"
 
@@ -20,19 +19,24 @@ export async function POST(req: Request) {
 
   try {
     const { Client } = await import("pg")
-    const client = new Client({ connectionString: dbUri, connectionTimeoutMillis: 8000 })
+    const client = new Client({
+      connectionString:        dbUri,
+      connectionTimeoutMillis: 8000,
+      ssl: !dbUri.includes("localhost") ? { rejectUnauthorized: false } : false,
+    })
     await client.connect()
 
-    // Core analytics schema pushed into the user's DB
     await client.query(`
       CREATE TABLE IF NOT EXISTS antz_pageviews (
-        id           BIGSERIAL PRIMARY KEY,
-        tracking_id  TEXT        NOT NULL,
-        url          TEXT        NOT NULL,
+        id           BIGSERIAL    PRIMARY KEY,
+        tracking_id  TEXT         NOT NULL,
+        url          TEXT         NOT NULL,
         referrer     TEXT,
         utm_source   TEXT,
         utm_medium   TEXT,
         utm_campaign TEXT,
+        utm_term     TEXT,
+        utm_content  TEXT,
         country      TEXT,
         city         TEXT,
         device       TEXT,
@@ -41,42 +45,47 @@ export async function POST(req: Request) {
         duration_ms  INTEGER,
         visitor_hash TEXT,
         session_hash TEXT,
-        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       );
 
       CREATE TABLE IF NOT EXISTS antz_events (
-        id           BIGSERIAL PRIMARY KEY,
-        tracking_id  TEXT        NOT NULL,
-        name         TEXT        NOT NULL,
+        id           BIGSERIAL    PRIMARY KEY,
+        tracking_id  TEXT         NOT NULL,
+        name         TEXT         NOT NULL,
         properties   JSONB,
         url          TEXT,
         visitor_hash TEXT,
         session_hash TEXT,
-        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       );
 
       CREATE TABLE IF NOT EXISTS antz_sessions (
-        id           BIGSERIAL PRIMARY KEY,
-        tracking_id  TEXT        NOT NULL,
-        session_hash TEXT        NOT NULL UNIQUE,
+        id           BIGSERIAL    PRIMARY KEY,
+        tracking_id  TEXT         NOT NULL,
+        session_hash TEXT         NOT NULL UNIQUE,
         visitor_hash TEXT,
         entry_url    TEXT,
         exit_url     TEXT,
-        duration_ms  INTEGER,
-        page_count   INTEGER     DEFAULT 1,
+        duration_ms  INTEGER      DEFAULT 0,
+        page_count   INTEGER      DEFAULT 1,
         country      TEXT,
         device       TEXT,
         browser      TEXT,
         os           TEXT,
         referrer     TEXT,
-        started_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        started_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       );
 
       CREATE INDEX IF NOT EXISTS idx_pageviews_tracking  ON antz_pageviews(tracking_id);
       CREATE INDEX IF NOT EXISTS idx_pageviews_created   ON antz_pageviews(created_at);
+      CREATE INDEX IF NOT EXISTS idx_pageviews_visitor   ON antz_pageviews(visitor_hash);
+      CREATE INDEX IF NOT EXISTS idx_pageviews_session   ON antz_pageviews(session_hash);
       CREATE INDEX IF NOT EXISTS idx_events_tracking     ON antz_events(tracking_id);
+      CREATE INDEX IF NOT EXISTS idx_events_created      ON antz_events(created_at);
       CREATE INDEX IF NOT EXISTS idx_sessions_tracking   ON antz_sessions(tracking_id);
+      CREATE INDEX IF NOT EXISTS idx_sessions_started    ON antz_sessions(started_at);
+      CREATE INDEX IF NOT EXISTS idx_sessions_visitor    ON antz_sessions(visitor_hash);
     `)
 
     await client.end()

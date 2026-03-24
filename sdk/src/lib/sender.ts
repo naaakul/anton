@@ -1,8 +1,7 @@
-
-const COLLECT_URL = "https://antonalyze.com/api/collect"
-
-export function send(payload: unknown, endpoint = COLLECT_URL): void {
+export function send(payload: unknown, endpoint: string): void {
   const body = JSON.stringify(payload)
+
+  if (typeof navigator === "undefined") return
 
   if (navigator.sendBeacon) {
     const blob = new Blob([body], { type: "application/json" })
@@ -11,10 +10,9 @@ export function send(payload: unknown, endpoint = COLLECT_URL): void {
   }
 
   fetch(endpoint, {
-    method:     "POST",
+    method:    "POST",
     body,
-    headers:    { "Content-Type": "application/json" },
-    keepalive:  true,
-  }).catch(() => {
-  })
+    headers:   { "Content-Type": "application/json" },
+    keepalive: true,
+  }).catch(() => {})
 }

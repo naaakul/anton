@@ -27,10 +27,10 @@ export function useVishlex() {
 
 
 type Props = {
-  trackingId:   string
-  collectUrl?:  string  
-  disabled?:    boolean
-  children:     ReactNode
+  trackingId:  string
+  collectUrl:  string    
+  disabled?:   boolean
+  children:    ReactNode
 }
 
 export function VishlexProvider({

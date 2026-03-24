@@ -41,16 +41,30 @@ export async function getPgPool(appId: string, encryptedUri: string) {
 }
 
 export async function runPgQuery<T = unknown>(
-  appId: string,
-  encryptedUri: string,
-  sql: string,
+  appId:  string,
+  rawUri: string,       
+  sql:    string,
   params: unknown[] = []
 ): Promise<T[]> {
-  const pool   = await getPgPool(appId, encryptedUri)
+  const { Pool } = await import("pg")
+
+  if (!pgPool.has(appId)) {
+    const pool = new Pool({
+      connectionString:        rawUri,
+      max:                     3,
+      idleTimeoutMillis:       30_000,
+      connectionTimeoutMillis: 10_000,
+      ssl: !rawUri.includes("localhost") ? { rejectUnauthorized: false } : false,
+    })
+    pool.on("error", () => pgPool.delete(appId))
+    pgPool.set(appId, pool)
+  }
+
+  const pool   = pgPool.get(appId)!
   const client = await pool.connect()
 
   try {
-    await client.query(`SET statement_timeout = ${QUERY_TIMEOUT_MS}`)
+    await client.query(`SET statement_timeout = 10000`)
     const result = await client.query(sql, params)
     return result.rows as T[]
   } finally {
@@ -141,3 +155,4 @@ export async function closeAll() {
   pgPool.clear()
   mongoMap.clear()
 }
+
