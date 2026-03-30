@@ -467,6 +467,7 @@ export default function AppsPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
+        
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Apps</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
