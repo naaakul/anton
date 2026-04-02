@@ -1,6 +1,6 @@
 {
   "name": "vishlex",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Privacy-friendly analytics SDK for Next.js — bring your own database",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -9,31 +9,36 @@
     ".": {
       "import": "./dist/index.js",
       "require": "./dist/index.cjs",
-      "types":   "./dist/index.d.ts"
+      "types": "./dist/index.d.ts"
     },
     "./next": {
       "import": "./dist/next.js",
       "require": "./dist/next.cjs",
-      "types":   "./dist/next.d.ts"
+      "types": "./dist/next.d.ts"
     }
   },
   "scripts": {
     "build": "tsup",
-    "dev":   "tsup --watch",
+    "dev": "tsup --watch",
     "clean": "rm -rf dist"
   },
-  "keywords": ["analytics", "nextjs", "privacy", "vishlex"],
+  "keywords": [
+    "analytics",
+    "nextjs",
+    "privacy",
+    "vishlex"
+  ],
   "author": "",
   "license": "ISC",
   "peerDependencies": {
-    "react":     ">=18",
+    "react": ">=18",
     "react-dom": ">=18",
-    "next":      ">=14"
+    "next": ">=14"
   },
   "devDependencies": {
-    "@types/node":  "^25.5.0",
+    "@types/node": "^25.5.0",
     "@types/react": "^18.0.0",
-    "tsup":         "^8.5.1",
-    "typescript":   "^5.9.3"
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   }
 }
