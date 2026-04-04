@@ -85,8 +85,8 @@ export default function AppsPage() {
       </header>
 
       <main className="px-3">
-        <div className="rounded-2xl bg-[#111111] border border-white/[0.06] min-h-[calc(100vh-70px)] w-full flex flex-col">
-          <div className="flex w-full justify-between p-3">
+        <div className="rounded-2xl bg-[#111111] border border-white/[0.06] h-[calc(100vh-70px)] w-full flex flex-col px-3">
+          <div className="flex w-full justify-between py-3">
             <p className="text-sm text-muted-foreground mt-0.5">
               {apps.length === 0
                 ? "No apps yet"
@@ -101,35 +101,38 @@ export default function AppsPage() {
               Create app
             </Button>
           </div>
-          {loadingApps ? (
-            <div className="flex items-center justify-center w-full flex-1 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin" />
-            </div>
-          ) : apps.length === 0 ? (
-            <div className="text-center w-full flex-1 flex justify-center items-center flex-col">
-              <Database className="w-8 h-8 text-white mx-auto mb-3" />
-              <p className="text-sm font-medium">No apps yet</p>
-              <p className="text-xs text-muted-foreground mt-1 mb-4">
-                Create your first app to start tracking analytics
-              </p>
-              <Button
-                className="bg-black cursor-pointer"
-                size="sm"
-                onClick={() => setModalOpen(true)}
-              >
-                <Plus className="w-4 h-4 mr-1.5" />
-                Create app
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {apps.map((app) => (
-                <Link href={`/apps/${app.id}`}>
-                  <AppCard key={app.id} app={app} />
-                </Link>
-              ))}
-            </div>
-          )}
+          <div className="h-[1px] w-full bg-[#1F1F1F]" />
+          <div className="w-full flex-1 overflow-hidden">
+            {loadingApps ? (
+              <div className="flex items-center justify-center w-full h-full text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+            ) : apps.length === 0 ? (
+              <div className="text-center w-full h-full flex justify-center items-center flex-col">
+                <Database className="w-8 h-8 text-white mx-auto mb-3" />
+                <p className="text-sm font-medium">No apps yet</p>
+                <p className="text-xs text-muted-foreground mt-1 mb-4">
+                  Create your first app to start tracking analytics
+                </p>
+                <Button
+                  className="bg-black cursor-pointer"
+                  size="sm"
+                  onClick={() => setModalOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Create app
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 py-3 h-full overflow-y-auto custom-scroll">
+                {apps.map((app) => (
+                  <Link key={app.id} href={`/apps/${app.id}`}className="h-fit rounded-2xl">
+                    <AppCard app={app} />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </main>
       <CreateAppModal
