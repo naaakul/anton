@@ -1,18 +1,23 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Globe,
   CheckCircle2,
@@ -21,21 +26,23 @@ import {
   Loader2,
   Database,
   ChevronRight,
-} from "lucide-react"
+  BookText,
+} from "lucide-react";
+import Link from "next/link";
 
-type Step = 1 | 2 | 3
+type Step = 1 | 2 | 3;
 
-type ConnectStatus = "idle" | "testing" | "pushing" | "ok" | "fail"
+type ConnectStatus = "idle" | "testing" | "pushing" | "ok" | "fail";
 
 type App = {
-  id:         string
-  trackingId: string
-  name:       string
-  domain:     string
-  framework:  string
-  dbType:     string
-  createdAt:  string
-}
+  id: string;
+  trackingId: string;
+  name: string;
+  domain: string;
+  framework: string;
+  dbType: string;
+  createdAt: string;
+};
 
 function getSnippet(trackingId: string) {
   return `import { AntonalyzeProvider } from "antonalyze/next"
@@ -51,7 +58,7 @@ export default function RootLayout({ children }) {
       </body>
     </html>
   )
-}`
+}`;
 }
 
 export default function CreateAppModal({
@@ -59,118 +66,117 @@ export default function CreateAppModal({
   onClose,
   onCreated,
 }: {
-  open:      boolean
-  onClose:   () => void
-  onCreated: (app: App) => void
+  open: boolean;
+  onClose: () => void;
+  onCreated: (app: App) => void;
 }) {
-  const [step,          setStep]          = useState<Step>(1)
-  const [name,          setName]          = useState("")
-  const [domain,        setDomain]        = useState("")
-  const [framework,     setFramework]     = useState("nextjs")
-  const [dbUri,         setDbUri]         = useState("")
-  const [connectStatus, setConnectStatus] = useState<ConnectStatus>("idle")
-  const [connectError,  setConnectError]  = useState("")
-  const [submitting,    setSubmitting]    = useState(false)
-  const [createdApp,    setCreatedApp]    = useState<App | null>(null)
-  const [copied,        setCopied]        = useState(false)
+  const [step, setStep] = useState<Step>(1);
+  const [name, setName] = useState("");
+  const [domain, setDomain] = useState("");
+  const [framework, setFramework] = useState("nextjs");
+  const [dbUri, setDbUri] = useState("");
+  const [connectStatus, setConnectStatus] = useState<ConnectStatus>("idle");
+  const [connectError, setConnectError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [createdApp, setCreatedApp] = useState<App | null>(null);
+  const [copied, setCopied] = useState(false);
 
   function resetModal() {
-    setStep(1)
-    setName("")
-    setDomain("")
-    setFramework("nextjs")
-    setDbUri("")
-    setConnectStatus("idle")
-    setConnectError("")
-    setSubmitting(false)
-    setCreatedApp(null)
-    setCopied(false)
+    setStep(1);
+    setName("");
+    setDomain("");
+    setFramework("nextjs");
+    setDbUri("");
+    setConnectStatus("idle");
+    setConnectError("");
+    setSubmitting(false);
+    setCreatedApp(null);
+    setCopied(false);
   }
 
   function handleClose() {
-    resetModal()
-    onClose()
+    resetModal();
+    onClose();
   }
 
   async function handleConnect() {
-    setConnectStatus("testing")
-    setConnectError("")
+    setConnectStatus("testing");
+    setConnectError("");
 
     // Step 1 — test connection
     const testRes = await fetch("/api/apps/test-connection", {
-      method:  "POST",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ dbUri, dbType: "POSTGRES" }),
-    })
+      body: JSON.stringify({ dbUri, dbType: "POSTGRES" }),
+    });
 
     if (!testRes.ok) {
-      const data = await testRes.json()
-      setConnectStatus("fail")
-      setConnectError(data.error ?? "Connection failed")
-      return
+      const data = await testRes.json();
+      setConnectStatus("fail");
+      setConnectError(data.error ?? "Connection failed");
+      return;
     }
 
     // Step 2 — push schema
-    setConnectStatus("pushing")
+    setConnectStatus("pushing");
 
     const pushRes = await fetch("/api/apps/push-schema", {
-      method:  "POST",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ dbUri }),
-    })
+      body: JSON.stringify({ dbUri }),
+    });
 
     if (!pushRes.ok) {
-      const data = await pushRes.json()
-      setConnectStatus("fail")
-      setConnectError(data.error ?? "Schema push failed")
-      return
+      const data = await pushRes.json();
+      setConnectStatus("fail");
+      setConnectError(data.error ?? "Schema push failed");
+      return;
     }
 
-    setConnectStatus("ok")
+    setConnectStatus("ok");
   }
 
   async function handleCreate() {
-    setSubmitting(true)
+    setSubmitting(true);
 
     const res = await fetch("/api/apps/create", {
-      method:  "POST",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
+      body: JSON.stringify({
         name,
         domain,
         framework,
         dbType: "POSTGRES",
         dbUri,
       }),
-    })
+    });
 
-    setSubmitting(false)
+    setSubmitting(false);
 
-    if (!res.ok) return
+    if (!res.ok) return;
 
-    const app = await res.json()
-    setCreatedApp(app)
-    setStep(3)
+    const app = await res.json();
+    setCreatedApp(app);
+    setStep(3);
   }
 
   function handleCopy() {
-    if (!createdApp) return
-    navigator.clipboard.writeText(getSnippet(createdApp.trackingId))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    if (!createdApp) return;
+    navigator.clipboard.writeText(getSnippet(createdApp.trackingId));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   function handleFinish() {
-    if (createdApp) onCreated(createdApp)
-    handleClose()
+    if (createdApp) onCreated(createdApp);
+    handleClose();
   }
 
-  const step1Valid = name.trim() && domain.trim() && framework
+  const step1Valid = name.trim() && domain.trim() && framework;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="sm:max-w-lg gap-0 p-0 overflow-hidden">
-
+      <DialogContent className="sm:max-w-lg gap-0 p-0 overflow-hidden bg-[#0A0A0A] text-white border-[#1F1F1F]">
         {/* ── Header ── */}
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="text-base font-semibold">
@@ -186,10 +192,10 @@ export default function CreateAppModal({
                 key={s}
                 className={`h-1 rounded-full transition-all duration-300 ${
                   s === step
-                    ? "w-6 bg-foreground"
+                    ? "w-6 bg-muted"
                     : s < step
-                    ? "w-4 bg-foreground/30"
-                    : "w-4 bg-muted"
+                      ? "w-4 bg-neutral-600/20"
+                      : "w-4 bg-neutral-600"
                 }`}
               />
             ))}
@@ -227,7 +233,7 @@ export default function CreateAppModal({
               </div>
             </div>
 
-            <div className="space-y-1.5">
+            {/* <div className="space-y-1.5">
               <Label>Framework</Label>
               <Select value={framework} onValueChange={setFramework}>
                 <SelectTrigger>
@@ -237,7 +243,7 @@ export default function CreateAppModal({
                   <SelectItem value="nextjs">Next.js</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </div> */}
           </div>
         )}
 
@@ -259,30 +265,46 @@ export default function CreateAppModal({
                   className="font-mono text-sm flex-1"
                   value={dbUri}
                   onChange={(e) => {
-                    setDbUri(e.target.value)
-                    setConnectStatus("idle")
-                    setConnectError("")
+                    setDbUri(e.target.value);
+                    setConnectStatus("idle");
+                    setConnectError("");
                   }}
                 />
                 <Button
                   type="button"
-                  variant="outline"
+                  // variant="outline"
                   size="sm"
-                  className="shrink-0 h-9"
-                  disabled={!dbUri || connectStatus === "testing" || connectStatus === "pushing"}
+                  className="shrink-0 h-9 bg-[#1F1F1F] cursor-pointer"
+                  disabled={
+                    !dbUri ||
+                    connectStatus === "testing" ||
+                    connectStatus === "pushing"
+                  }
                   onClick={handleConnect}
                 >
                   {connectStatus === "testing" && (
-                    <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Testing</>
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      Testing
+                    </>
                   )}
                   {connectStatus === "pushing" && (
-                    <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Pushing</>
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      Pushing
+                    </>
                   )}
                   {(connectStatus === "idle" || connectStatus === "fail") && (
-                    <><Database className="w-3.5 h-3.5 mr-1.5" />Connect</>
+                    <>
+                      <Database className="w-3.5 h-3.5 mr-1.5" />
+                      Connect
+                    </>
                   )}
                   {connectStatus === "ok" && (
-                    <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-green-500" />Connected</>
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-green-500" />
+                      Connected
+                    </>
                   )}
                 </Button>
               </div>
@@ -315,7 +337,8 @@ export default function CreateAppModal({
                   App created
                 </p>
                 <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
-                  Tracking ID: <span className="font-mono">{createdApp.trackingId}</span>
+                  Tracking ID:{" "}
+                  <span className="font-mono">{createdApp.trackingId}</span>
                 </p>
               </div>
             </div>
@@ -325,26 +348,48 @@ export default function CreateAppModal({
                 <Label className="text-xs text-muted-foreground">
                   Add this to your app/layout.tsx
                 </Label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={handleCopy}
-                >
-                  {copied
-                    ? <><Check className="w-3 h-3 mr-1" />Copied</>
-                    : <><Copy className="w-3 h-3 mr-1" />Copy</>
-                  }
-                </Button>
+                <div className="flex itmes-center">
+                  <Link href={"/docs"} className="px-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs cursor-pointer"
+                    >
+                      <BookText className="w-3 h-3 mr-1"  />
+                      Docs
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs cursor-pointer"
+                    onClick={handleCopy}
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-3 h-3 mr-1" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 mr-1" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
-              <pre className="bg-muted rounded-md p-3 text-xs font-mono overflow-x-auto leading-relaxed whitespace-pre">
+              <pre className="bg-[#131313] rounded-md p-3 text-xs font-mono overflow-x-auto leading-relaxed whitespace-pre">
                 {getSnippet(createdApp.trackingId)}
               </pre>
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Your app will show <span className="font-medium text-foreground">Waiting to connect</span> until
-              the first event is received from your site.
+              Your app will show{" "}
+              <span className="font-medium text-foreground">
+                Waiting to connect
+              </span>{" "}
+              until the first event is received from your site.
             </p>
           </div>
         )}
@@ -359,11 +404,7 @@ export default function CreateAppModal({
 
           <div className="flex gap-2">
             {step === 2 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setStep(1)}
-              >
+              <Button variant="ghost" size="sm" onClick={() => setStep(1)}>
                 Back
               </Button>
             )}
@@ -384,10 +425,16 @@ export default function CreateAppModal({
                 disabled={connectStatus !== "ok" || submitting}
                 onClick={handleCreate}
               >
-                {submitting
-                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Creating...</>
-                  : <>Next <ChevronRight className="w-3.5 h-3.5 ml-1" /></>
-                }
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </>
+                )}
               </Button>
             )}
 
@@ -398,8 +445,7 @@ export default function CreateAppModal({
             )}
           </div>
         </div>
-
       </DialogContent>
     </Dialog>
-  )
+  );
 }

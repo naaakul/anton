@@ -124,9 +124,9 @@ export default function AppsPage() {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 py-3 h-full overflow-y-auto custom-scroll">
+              <div className="grid auto-rows-min grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 py-3 h-full overflow-y-auto custom-scroll">
                 {apps.map((app) => (
-                  <Link key={app.id} href={`/apps/${app.id}`}className="h-fit rounded-2xl">
+                  <Link key={app.id} href={`/apps/${app.id}`} className="h-fit rounded-2xl">
                     <AppCard app={app} />
                   </Link>
                 ))}
