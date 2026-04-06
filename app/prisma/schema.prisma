@@ -13,9 +13,9 @@ enum DbType {
 }
 
 enum AppStatus {
-  WAITING    // never received an event
-  LIVE       // received event in last 5 minutes
-  INACTIVE   // received events before but not recently
+  WAITING    
+  LIVE       
+  INACTIVE   
 }
 
 model User {

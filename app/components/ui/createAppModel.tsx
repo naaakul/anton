@@ -41,7 +41,7 @@ type App = {
   name: string;
   domain: string;
   framework: string;
-  dbType: string;
+  status: "WAITING" | "LIVE" | "INACTIVE";
   createdAt: string;
 };
 
@@ -54,16 +54,19 @@ type DbRecord = {
 };
 
 function getSnippet(trackingId: string) {
-  return `import { AntonalyzeProvider } from "antonalyze/next"
+  return `import { VishlexProvider } from "vishlex/next"
 
-// app/layout.tsx  — wrap your root layout
+// app/layout.tsx
 export default function RootLayout({ children }) {
   return (
     <html>
       <body>
-        <AntonalyzeProvider trackingId="${trackingId}">
+        <VishlexProvider
+          trackingId="${trackingId}"
+          collectUrl={process.env.NEXT_PUBLIC_COLLECT_URL}
+        >
           {children}
-        </AntonalyzeProvider>
+        </VishlexProvider>
       </body>
     </html>
   )
