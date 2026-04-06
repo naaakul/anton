@@ -12,6 +12,12 @@ enum DbType {
   MONGODB
 }
 
+enum AppStatus {
+  WAITING    // never received an event
+  LIVE       // received event in last 5 minutes
+  INACTIVE   // received events before but not recently
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -24,6 +30,7 @@ model User {
   sessions Session[]
   accounts Account[]
   apps     App[]
+  databases Database[]   // ← user's saved DBs
 }
 
 model Session {
@@ -70,21 +77,42 @@ model Verification {
   @@index([identifier])
 }
 
-model App {
-  id             String    @id @default(cuid())
-  trackingId     String    @unique @default(cuid())
-  name           String
-  domain         String
-  framework      String    @default("nextjs")
+// ── Standalone DB record — can be shared across multiple apps ─────────────────
+model Database {
+  id             String   @id @default(cuid())
+  name           String                        // user-given label e.g. "Production DB"
   dbType         DbType
   encryptedDbUri String
   userId         String
-  lastSeenAt     DateTime? 
-  updatedAt      DateTime  @updatedAt
-  createdAt      DateTime  @default(now())
+  lastHealthAt   DateTime?                     // last time health check passed
+  isHealthy      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apps App[]
+
+  @@index([userId])
+}
+
+// ── App — now points to a Database record instead of storing URI directly ─────
+model App {
+  id         String    @id @default(cuid())
+  trackingId String    @unique @default(cuid())
+  name       String
+  domain     String
+  framework  String    @default("nextjs")
+  status     AppStatus @default(WAITING)
+  lastSeenAt DateTime?
+  databaseId String                            // FK to Database
+  userId     String
+  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime  @default(now())
+
+  database Database @relation(fields: [databaseId], references: [id])
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([trackingId])
+  @@index([databaseId])
 }

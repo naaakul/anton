@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,7 @@ import {
   Database,
   ChevronRight,
   BookText,
+  Plus,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -42,6 +43,14 @@ type App = {
   framework: string;
   dbType: string;
   createdAt: string;
+};
+
+type DbRecord = {
+  id: string;
+  name: string;
+  dbType: string;
+  isHealthy: boolean;
+  lastHealthAt: string | null;
 };
 
 function getSnippet(trackingId: string) {
@@ -80,6 +89,12 @@ export default function CreateAppModal({
   const [submitting, setSubmitting] = useState(false);
   const [createdApp, setCreatedApp] = useState<App | null>(null);
   const [copied, setCopied] = useState(false);
+  const [databases, setDatabases] = useState<DbRecord[]>([]);
+  const [selectedDbId, setSelectedDbId] = useState<string>("");
+  const [showNewDbForm, setShowNewDbForm] = useState(false);
+  const [newDbName, setNewDbName] = useState("");
+  const [newDbUri, setNewDbUri] = useState("");
+  const [savingDb, setSavingDb] = useState(false);
 
   function resetModal() {
     setStep(1);
@@ -94,36 +109,35 @@ export default function CreateAppModal({
     setCopied(false);
   }
 
-  function handleClose() {
-    resetModal();
-    onClose();
-  }
+  useEffect(() => {
+    if (step !== 2) return;
+    fetch("/api/databases")
+      .then((r) => r.json())
+      .then((data) => setDatabases(Array.isArray(data) ? data : []));
+  }, [step]);
 
   async function handleConnect() {
+    if (!selectedDbId) return;
     setConnectStatus("testing");
     setConnectError("");
 
-    // Step 1 — test connection
-    const testRes = await fetch("/api/apps/test-connection", {
+    const testRes = await fetch(`/api/databases/${selectedDbId}/health`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dbUri, dbType: "POSTGRES" }),
     });
 
     if (!testRes.ok) {
       const data = await testRes.json();
       setConnectStatus("fail");
-      setConnectError(data.error ?? "Connection failed");
+      setConnectError(data.error ?? "Health check failed");
       return;
     }
 
-    // Step 2 — push schema
     setConnectStatus("pushing");
 
     const pushRes = await fetch("/api/apps/push-schema", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dbUri }),
+      body: JSON.stringify({ databaseId: selectedDbId }),
     });
 
     if (!pushRes.ok) {
@@ -136,9 +150,34 @@ export default function CreateAppModal({
     setConnectStatus("ok");
   }
 
+  async function handleSaveNewDb() {
+    setSavingDb(true);
+    const res = await fetch("/api/databases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: newDbName,
+        dbUri: newDbUri,
+        dbType: "POSTGRES",
+      }),
+    });
+    setSavingDb(false);
+    if (!res.ok) return;
+    const db = await res.json();
+    setDatabases((prev) => [db, ...prev]);
+    setSelectedDbId(db.id);
+    setShowNewDbForm(false);
+    setNewDbName("");
+    setNewDbUri("");
+  }
+
+  function handleClose() {
+    resetModal();
+    onClose();
+  }
+
   async function handleCreate() {
     setSubmitting(true);
-
     const res = await fetch("/api/apps/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -146,15 +185,11 @@ export default function CreateAppModal({
         name,
         domain,
         framework,
-        dbType: "POSTGRES",
-        dbUri,
+        databaseId: selectedDbId,
       }),
     });
-
     setSubmitting(false);
-
     if (!res.ok) return;
-
     const app = await res.json();
     setCreatedApp(app);
     setStep(3);
@@ -251,79 +286,158 @@ export default function CreateAppModal({
         {step === 2 && (
           <div className="px-6 py-5 space-y-4">
             <p className="text-sm text-muted-foreground">
-              Paste your Neon (or any Postgres) URI. We'll test the connection
-              and push the analytics schema automatically.
+              Choose a database to store this app's analytics.
             </p>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="db-uri">Postgres URI</Label>
-              <div className="flex gap-2">
+            {/* DB list */}
+            <div className="space-y-2">
+              {databases.length === 0 && !showNewDbForm && (
+                <p className="text-xs text-muted-foreground py-2">
+                  No databases yet — add one below.
+                </p>
+              )}
+
+              {databases.map((db) => (
+                <div
+                  key={db.id}
+                  onClick={() => {
+                    setSelectedDbId(db.id);
+                    setConnectStatus("idle");
+                  }}
+                  className={`flex items-center justify-between rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+                    selectedDbId === db.id
+                      ? "border-foreground bg-muted/40"
+                      : "border-border hover:bg-muted/20"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Database className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium leading-none">
+                        {db.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {db.dbType}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full ${
+                        db.isHealthy
+                          ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"
+                          : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                      }`}
+                    >
+                      {db.isHealthy ? "Healthy" : "Unknown"}
+                    </span>
+                    {selectedDbId === db.id && (
+                      <CheckCircle2 className="w-4 h-4 text-foreground" />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Add new DB form */}
+            {showNewDbForm ? (
+              <div className="border rounded-lg p-3 space-y-2.5">
+                <p className="text-xs font-medium">New database</p>
                 <Input
-                  id="db-uri"
+                  placeholder="Label (e.g. Production DB)"
+                  value={newDbName}
+                  onChange={(e) => setNewDbName(e.target.value)}
+                  className="h-8 text-sm"
+                />
+                <Input
                   type="password"
                   placeholder="postgres://user:pass@host:5432/db"
-                  className="font-mono text-sm flex-1"
-                  value={dbUri}
-                  onChange={(e) => {
-                    setDbUri(e.target.value);
-                    setConnectStatus("idle");
-                    setConnectError("");
-                  }}
+                  value={newDbUri}
+                  onChange={(e) => setNewDbUri(e.target.value)}
+                  className="h-8 text-sm font-mono"
                 />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={!newDbName || !newDbUri || savingDb}
+                    onClick={handleSaveNewDb}
+                  >
+                    {savingDb ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={() => setShowNewDbForm(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full h-8 text-xs border-dashed"
+                onClick={() => setShowNewDbForm(true)}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                Add new database
+              </Button>
+            )}
+
+            {/* Connect button + status */}
+            {selectedDbId && !showNewDbForm && (
+              <div className="space-y-2">
                 <Button
-                  type="button"
-                  // variant="outline"
                   size="sm"
-                  className="shrink-0 h-9 bg-[#1F1F1F] cursor-pointer"
+                  className="w-full"
                   disabled={
-                    !dbUri ||
                     connectStatus === "testing" ||
-                    connectStatus === "pushing"
+                    connectStatus === "pushing" ||
+                    connectStatus === "ok"
                   }
                   onClick={handleConnect}
                 >
                   {connectStatus === "testing" && (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                      Testing
+                      Testing connection
                     </>
                   )}
                   {connectStatus === "pushing" && (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                      Pushing
-                    </>
-                  )}
-                  {(connectStatus === "idle" || connectStatus === "fail") && (
-                    <>
-                      <Database className="w-3.5 h-3.5 mr-1.5" />
-                      Connect
+                      Pushing schema
                     </>
                   )}
                   {connectStatus === "ok" && (
                     <>
                       <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-green-500" />
-                      Connected
+                      Ready
                     </>
                   )}
+                  {(connectStatus === "idle" || connectStatus === "fail") &&
+                    "Connect & push schema"}
                 </Button>
+
+                {connectStatus === "fail" && (
+                  <p className="text-xs text-destructive">{connectError}</p>
+                )}
+                {connectStatus === "ok" && (
+                  <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 px-3 py-2">
+                    <p className="text-xs text-green-700 dark:text-green-400 font-medium">
+                      Schema ready — antz_pageviews, antz_events, antz_sessions
+                    </p>
+                  </div>
+                )}
               </div>
-
-              {connectStatus === "fail" && (
-                <p className="text-xs text-destructive mt-1">{connectError}</p>
-              )}
-
-              {connectStatus === "ok" && (
-                <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 px-3 py-2 mt-2">
-                  <p className="text-xs text-green-700 dark:text-green-400 font-medium">
-                    Connected — analytics schema pushed successfully
-                  </p>
-                  <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
-                    Tables: antz_pageviews, antz_events, antz_sessions
-                  </p>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         )}
 
@@ -355,7 +469,7 @@ export default function CreateAppModal({
                       size="sm"
                       className="h-6 text-xs cursor-pointer"
                     >
-                      <BookText className="w-3 h-3 mr-1"  />
+                      <BookText className="w-3 h-3 mr-1" />
                       Docs
                     </Button>
                   </Link>
