@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
+import { prisma }       from "@/lib/prisma"
 import getServerSession from "@/utils/getServerSession"
+import { decrypt }      from "@/lib/crypto"
 
 export async function POST(req: Request) {
   const session = await getServerSession()
@@ -7,15 +9,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  let body: { dbUri?: string }
+  let body: { databaseId?: string }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
-  const { dbUri } = body
-  if (!dbUri) return NextResponse.json({ error: "dbUri required" }, { status: 400 })
+  const { databaseId } = body
+  if (!databaseId) {
+    return NextResponse.json({ error: "databaseId required" }, { status: 400 })
+  }
+
+  const database = await prisma.database.findFirst({
+    where:  { id: databaseId, userId: session.user.id },
+    select: { id: true, encryptedDbUri: true },
+  })
+
+  if (!database) {
+    return NextResponse.json({ error: "Database not found" }, { status: 404 })
+  }
+
+  let dbUri: string
+  try {
+    dbUri = decrypt(database.encryptedDbUri)
+  } catch {
+    return NextResponse.json(
+      { error: "Failed to decrypt credentials" },
+      { status: 500 }
+    )
+  }
 
   try {
     const { Client } = await import("pg")
@@ -77,22 +100,22 @@ export async function POST(req: Request) {
         updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       );
 
-      CREATE INDEX IF NOT EXISTS idx_pageviews_tracking  ON antz_pageviews(tracking_id);
-      CREATE INDEX IF NOT EXISTS idx_pageviews_created   ON antz_pageviews(created_at);
-      CREATE INDEX IF NOT EXISTS idx_pageviews_visitor   ON antz_pageviews(visitor_hash);
-      CREATE INDEX IF NOT EXISTS idx_pageviews_session   ON antz_pageviews(session_hash);
-      CREATE INDEX IF NOT EXISTS idx_events_tracking     ON antz_events(tracking_id);
-      CREATE INDEX IF NOT EXISTS idx_events_created      ON antz_events(created_at);
-      CREATE INDEX IF NOT EXISTS idx_sessions_tracking   ON antz_sessions(tracking_id);
-      CREATE INDEX IF NOT EXISTS idx_sessions_started    ON antz_sessions(started_at);
-      CREATE INDEX IF NOT EXISTS idx_sessions_visitor    ON antz_sessions(visitor_hash);
+      CREATE INDEX IF NOT EXISTS idx_pageviews_tracking ON antz_pageviews(tracking_id);
+      CREATE INDEX IF NOT EXISTS idx_pageviews_created  ON antz_pageviews(created_at);
+      CREATE INDEX IF NOT EXISTS idx_pageviews_visitor  ON antz_pageviews(visitor_hash);
+      CREATE INDEX IF NOT EXISTS idx_pageviews_session  ON antz_pageviews(session_hash);
+      CREATE INDEX IF NOT EXISTS idx_events_tracking    ON antz_events(tracking_id);
+      CREATE INDEX IF NOT EXISTS idx_events_created     ON antz_events(created_at);
+      CREATE INDEX IF NOT EXISTS idx_sessions_tracking  ON antz_sessions(tracking_id);
+      CREATE INDEX IF NOT EXISTS idx_sessions_started   ON antz_sessions(started_at);
+      CREATE INDEX IF NOT EXISTS idx_sessions_visitor   ON antz_sessions(visitor_hash);
     `)
 
     await client.end()
     return NextResponse.json({ ok: true })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Schema push failed"
-    const safe = message.replace(/postgres(ql)?:\/\/[^\s]*/gi, "[uri]")
+    const safe    = message.replace(/postgres(ql)?:\/\/[^\s]*/gi, "[uri]")
     return NextResponse.json({ error: safe }, { status: 400 })
   }
 }
