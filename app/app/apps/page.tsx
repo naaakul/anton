@@ -7,6 +7,7 @@ import CreateAppModal        from "@/components/ui/createAppModel"
 import DatabaseModal         from "@/components/ui/databaseModal"
 import { Plus, Loader2, Database } from "lucide-react"
 import Link                  from "next/link"
+import Image from "next/image"
 
 type AppStatus = "WAITING" | "LIVE" | "INACTIVE"
 
@@ -86,9 +87,13 @@ export default function AppsPage() {
           </button>
 
           {/* Avatar */}
-          <div className="w-8 h-8 rounded-full overflow-hidden bg-neutral-700 flex-shrink-0">
-            {session?.user?.image && (
-              <img src={session.user.image} alt="" className="w-full h-full object-cover" />
+          <div className="w-8 h-8 rounded-full flex overflow-hidden justify-center items-center bg-neutral-800 flex-shrink-0">
+            {session?.user?.image ? (
+              <Image src={session.user.image} alt="" height={32} width={32} className="w-full h-full" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-white text-sm font-medium">
+                U
+              </div>
             )}
           </div>
         </div>

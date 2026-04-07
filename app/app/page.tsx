@@ -13,7 +13,7 @@ const Page = async () => {
           <Button className="bg-white text-black cursor-pointer">apps</Button>
         </Link>
       ) : (
-        <Link href={"/auth/login"}>
+        <Link href={"/login"}>
           <Button className="bg-white text-black cursor-pointer">login</Button>
         </Link>
       )}
